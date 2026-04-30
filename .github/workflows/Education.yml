@@ -1,4 +1,4 @@
-name: "YouTube Downloader - Working"
+name: "Download with youtube-dl"
 
 on:
   workflow_dispatch:
@@ -6,40 +6,25 @@ on:
       url:
         description: 'لینک ویدیو'
         required: true
-        default: 'https://youtu.be/jNQXAC9IVRw'
 
 jobs:
   download:
     runs-on: ubuntu-latest
     
     steps:
-      - name: نصب ffmpeg
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
-        
-      - name: نصب yt-dlp با روش جایگزین
+      - name: نصب youtube-dl
         run: |
-          # دانلود فایل اجرایی مستقیم
-          sudo wget https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -O /usr/local/bin/yt-dlp
-          sudo chmod a+rx /usr/local/bin/yt-dlp
+          sudo apt-get update
+          sudo apt-get install -y youtube-dl ffmpeg
           
-      - name: تست نصب
-        run: /usr/local/bin/yt-dlp --version
-        
       - name: دانلود ویدیو
         run: |
-          mkdir -p downloads
-          cd downloads
-          /usr/local/bin/yt-dlp "${{ github.event.inputs.url }}" -o "video.%(ext)s"
+          mkdir downloads
+          youtube-dl "${{ github.event.inputs.url }}" \
+            -o "downloads/video.%(ext)s"
           
       - name: آپلود
         uses: actions/upload-artifact@v4
         with:
-          name: youtube-video
-          path: downloads/          echo "فایل دانلود شده:"
-          ls -la
-          
-      - name: آپلود
-        uses: actions/upload-artifact@v4
-        with:
-          name: youtube-video
+          name: video
           path: downloads/
