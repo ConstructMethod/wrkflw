@@ -1,0 +1,34 @@
+name: Bing Image Scraper
+
+on:
+  workflow_dispatch:
+    inputs:
+      query:
+        description: 'عبارت جستجو'
+        required: true
+        default: 'The Walking Dead profile'
+
+jobs:
+  scrape-bing:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+      
+      - name: Install dependencies
+        run: |
+          pip install requests beautifulsoup4 selenium webdriver-manager
+          
+      - name: Scrape Bing Images
+        run: |
+          python - <<EOF
+          import requests
+          from bs4 import BeautifulSoup
+          
+          query = "${{ github.event.inputs.query }}"
+          url = f"https://www.bing.com/images/search?q={query}"
+          
+          # اینجا کد اسکرپینگ کامل...
+          EOF
