@@ -1,0 +1,58 @@
+name: "📥 یوتیوب دانلودر (پیشرفته)"
+
+# این قسمت باعث می‌شود که یک دکمه برای اجرای دستی در بخش Actions دیده شود
+on:
+  workflow_dispatch:
+    inputs:
+      video_url:
+        description: '📎 لینک ویدیوی یوتیوب (مثلا https://youtu.be/... یا https://www.youtube.com/watch?v=...)'
+        required: true
+        type: string
+      quality:
+        description: '🎬 کیفیت (خالی بذار = بهترین)'
+        required: false
+        type: string
+        default: 'bestvideo+bestaudio'
+        # راهنمایی: می‌توانید بنویسید 'best' یا 'worst' یا 'mp4'
+
+jobs:
+  download-from-youtube:
+    runs-on: ubuntu-latest
+    steps:
+      # -------- مرحله 1: نصب ابزار yt-dlp (موتور دانلود قوی) --------
+      - name: 🛠️ نصب yt-dlp و پیش‌نیازها
+        uses: AnimMouse/setup-yt-dlp@v3
+        with:
+          # ffmpeg برای چسباندن ویدیو و صدا به هم لازم است
+          ffmpeg: true
+          # aria2 کار دانلود را چندبخشی و خیلی سریع می‌کند
+          aria2: true
+
+      # -------- مرحله 2: دانلود ویدیو از یوتیوب با استفاده از لینک --------
+      - name: ⬇️ شروع دانلود ویدیو
+        id: download
+        run: |
+          # اینجا دستور اصلی دانلود نوشته می‌شود
+          # --output: اسم فایل خروجی را مشخص می‌کند
+          # --merge-output-format: فرمت نهایی رو mp4 می‌کند تا مشکل نداشته باشید
+          yt-dlp "${{ github.event.inputs.video_url }}" \
+            --output "my-video.%(ext)s" \
+            --merge-output-format mp4 \
+            --format "${{ github.event.inputs.quality }}"
+          
+          # این چند خط برای این است که بفهمیم فایل دانلود شده دقیقاً چه نامی پیدا کرده
+          # چون یوتیوب دانلودی گاهی پسوندهای مختلف دارد.
+          DOWNLOADED_FILE=$(ls my-video.* | head -n 1)
+          echo "file_name=$DOWNLOADED_FILE" >> $GITHUB_OUTPUT
+          echo "✅ دانلود با موفقیت کامل شد! فایل: $DOWNLOADED_FILE"
+
+      # -------- مرحله 3: ذخیره ویدیو در Artifact (دقیقاً مثل دفعه قبل) --------
+      - name: 📦 آپلود ویدیو به عنوان Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          # اسمی که در پایین صفحه می‌بینید
+          name: "youtube-video-output"
+          # آدرس فایلی که مرحله قبل دانلود کرده
+          path: ${{ steps.download.outputs.file_name }}
+          # اگر فایل بزرگ است، این گزینه به شما اجازه می‌دهد بعداً دانلود کنید
+          retention-days: 7
