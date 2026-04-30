@@ -1,4 +1,4 @@
-name: "یوتیوب دانلودر ساده"
+name: "YT Downloader with Debug"
 
 on:
   workflow_dispatch:
@@ -11,17 +11,25 @@ jobs:
   download:
     runs-on: ubuntu-latest
     steps:
-      - name: نصب yt-dlp
+      - name: Install yt-dlp
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg
           pip install yt-dlp
           
-      - name: دانلود ویدیو
+      - name: Test download (with full error)
         run: |
-          yt-dlp "${{ github.event.inputs.video_url }}" -o "video.mp4"
+          # این خط رو اضافه کردم تا خطا رو کامل نشون بده
+          set -e
+          echo "لینک وارد شده: ${{ github.event.inputs.video_url }}"
+          echo "شروع تست..."
           
-      - name: آپلود
+          # با گزینه --verbose خطای کامل رو میبینی
+          yt-dlp "${{ github.event.inputs.video_url }}" \
+            -o "video.mp4" \
+            --verbose
+          
+      - name: Upload if success
         uses: actions/upload-artifact@v4
         with:
           name: my-video
