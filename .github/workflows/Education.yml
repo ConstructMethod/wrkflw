@@ -1,47 +1,41 @@
-name: "Ye Downloader - Safe Mode"
+name: "YouTube Downloader - Test"
 
 on:
   workflow_dispatch:
     inputs:
       url:
-        description: 'لینک ویدیو یا پلی‌لیست'
+        description: 'لینک ویدیو'
         required: true
-      max_duration:
-        description: 'حداکثر مدت ویدیو (ثانیه) - پیشنهاد 600 برای ویدیوهای کوتاه'
-        required: false
-        default: '600'
+        default: 'https://youtu.be/jNQXAC9IVRw'
 
 jobs:
   download:
     runs-on: ubuntu-latest
     
     steps:
-      - name: نصب yt-dlp
+      - name: نصب کامل yt-dlp
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg
-          pip install yt-dlp --upgrade
+          sudo apt-get install -y python3-pip ffmpeg
+          python3 -m pip install --upgrade pip
+          python3 -m pip install yt-dlp
+          yt-dlp --version  # چک کردن نصب
           
-      - name: دانلود ویدیو (با تنظیمات ایمن)
+      - name: دانلود ویدیو
         run: |
           mkdir -p downloads
+          cd downloads
           
           yt-dlp "${{ github.event.inputs.url }}" \
-            -o "downloads/%(title)s.%(ext)s" \
-            --format "best[height<=720]" \
-            --limit-rate 1.5M \
-            --sleep-interval 5 \
-            --max-duration ${{ github.event.inputs.max_duration }} \
-            --no-mtime \
-            --retries 3 \
-            --fragment-retries 3
+            -o "video.%(ext)s" \
+            --no-check-certificate \
+            --no-warnings
           
-          echo "✅ دانلود کامل شد"
-          ls -la downloads/
+          echo "فایل‌های دانلود شده:"
+          ls -la
           
-      - name: آپلود به Artifact
+      - name: آپلود
         uses: actions/upload-artifact@v4
         with:
-          name: youtube-video
+          name: downloaded-video
           path: downloads/
-          retention-days: 3
