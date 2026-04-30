@@ -1,0 +1,53 @@
+name: دانلود فایل از Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: 'ریپازیتوری (مثال: owner/repo)'
+        required: true
+        default: 'facebook/react'
+      tag:
+        description: 'Tag یا نسخه (خالی بذار = آخرین)'
+        required: false
+      file_pattern:
+        description: 'اسم فایل (میتونه * باشه)'
+        required: true
+        default: '*.zip'
+      extract_files:
+        description: 'استخراج خودکار؟ (true/false)'
+        required: false
+        default: 'false'
+
+jobs:
+  download-release:
+    runs-on: ubuntu-latest
+    
+    steps:
+      # مرحله 1: فایل‌ها رو دانلود کن
+      - name: Download release assets
+        id: downloader
+        uses: robinraju/release-downloader@v1.13
+        with:
+          repository: ${{ github.event.inputs.repo }}
+          tag: ${{ github.event.inputs.tag }}
+          latest: ${{ github.event.inputs.tag == '' }}
+          fileName: ${{ github.event.inputs.file_pattern }}
+          out-file-path: 'my-downloads'
+          extract: ${{ github.event.inputs.extract_files == 'true' }}
+      
+      # مرحله 2: نشون بده چی دانلود شده
+      - name: Show downloaded files
+        run: |
+          echo "لیست فایل‌های دانلود شده:"
+          ls -la my-downloads/
+          echo "-------------------"
+          echo "Tag مورد استفاده: ${{ steps.downloader.outputs.tag_name }}"
+          echo "اسم Release: ${{ steps.downloader.outputs.release_name }}"
+      
+      # مرحله 3: (اختیاری) آپلود به عنوان Artifact
+      - name: Upload as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: downloaded-files
+          path: my-downloads/
