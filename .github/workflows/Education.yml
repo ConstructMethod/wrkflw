@@ -1,4 +1,4 @@
-name: "Simple YouTube Downloader - No Docker"
+name: "YouTube Downloader - Working"
 
 on:
   workflow_dispatch:
@@ -13,28 +13,29 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - name: نصب yt-dlp مستقیم
+      - name: نصب ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+        
+      - name: نصب yt-dlp با روش جایگزین
         run: |
-          # نصب ffmpeg
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
+          # دانلود فایل اجرایی مستقیم
+          sudo wget https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -O /usr/local/bin/yt-dlp
+          sudo chmod a+rx /usr/local/bin/yt-dlp
           
-          # نصب yt-dlp با pip
-          pip install yt-dlp
-          
-          # تایید نصب
-          yt-dlp --version
-          
+      - name: تست نصب
+        run: /usr/local/bin/yt-dlp --version
+        
       - name: دانلود ویدیو
         run: |
           mkdir -p downloads
           cd downloads
-          yt-dlp "${{ github.event.inputs.url }}" \
-            --output "video.%(ext)s" \
-            --format "worst" \
-            --no-playlist
+          /usr/local/bin/yt-dlp "${{ github.event.inputs.url }}" -o "video.%(ext)s"
           
-          echo "فایل دانلود شده:"
+      - name: آپلود
+        uses: actions/upload-artifact@v4
+        with:
+          name: youtube-video
+          path: downloads/          echo "فایل دانلود شده:"
           ls -la
           
       - name: آپلود
