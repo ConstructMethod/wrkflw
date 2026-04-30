@@ -1,0 +1,28 @@
+name: "یوتیوب دانلودر ساده"
+
+on:
+  workflow_dispatch:
+    inputs:
+      video_url:
+        description: 'لینک ویدیو'
+        required: true
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    steps:
+      - name: نصب yt-dlp
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          pip install yt-dlp
+          
+      - name: دانلود ویدیو
+        run: |
+          yt-dlp "${{ github.event.inputs.video_url }}" -o "video.mp4"
+          
+      - name: آپلود
+        uses: actions/upload-artifact@v4
+        with:
+          name: my-video
+          path: video.mp4
