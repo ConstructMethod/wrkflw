@@ -1,48 +1,94 @@
-name: "دانلود مستقیم از Release"
+name: "DirectDL"
 
 on:
   workflow_dispatch:
     inputs:
-      release_url:
-        description: 'لینک مستقیم Release (مثال: https://github.com/owner/repo/releases/tag/v1.0.0)'
+      download_url:
+        description: 'لینک مستقیم فایل'
         required: true
-      file_pattern:
-        description: 'الگوی فایل (مثلاً *.zip یا *.exe یا * برای همه)'
-        required: true
-        default: '*'
+      output_name:
+        description: 'اسم دلخواه خروجی (خالی بذار = خودکار از لینک میگیره)'
+        required: false
+        default: ''
 
 jobs:
   download:
     runs-on: ubuntu-latest
     
     steps:
-      - name: استخراج اطلاعات از لینک
+      - name: استخراج نام فایل از لینک
         id: parse
         run: |
-          URL="${{ github.event.inputs.release_url }}"
+          URL="${{ github.event.inputs.download_url }}"
           
-          # استخراج owner/repo از لینک
-          REPO=$(echo "$URL" | sed -n 's|https://github.com/\([^/]*/[^/]*\)/releases/.*|\1|p')
-          # استخراج tag از لینک
-          TAG=$(echo "$URL" | sed -n 's|.*/releases/tag/\(.*\)$|\1|p')
+          # روش 1: از پارامتر filename= در لینک بگیر
+          FILENAME=$(echo "$URL" | grep -oP 'filename=\K[^&]+' | head -1)
           
-          echo "repository=$REPO" >> $GITHUB_OUTPUT
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          # روش 2: اگر روش بالا جواب نداد، از آخر لینک بعد از آخرین / بگیر
+          if [ -z "$FILENAME" ]; then
+            FILENAME=$(echo "$URL" | sed 's/.*\///' | sed 's/?.*//')
+          fi
           
-          echo "📦 ریپازیتوری: $REPO"
-          echo "🏷️ Tag: $TAG"
+          # روش 3: اگر بازم نگرفت، از تاریخ استفاده کن
+          if [ -z "$FILENAME" ]; then
+            FILENAME="downloaded_file"
+          fi
           
-      - name: دانلود فایل‌ها
-        uses: robinraju/release-downloader@v1.13
-        with:
-          repository: ${{ steps.parse.outputs.repository }}
-          tag: ${{ steps.parse.outputs.tag }}
-          fileName: ${{ github.event.inputs.file_pattern }}
-          out-file-path: 'downloads'
+          # استخراج پسوند فایل
+          EXT="${FILENAME##*.}"
+          if [ "$EXT" = "$FILENAME" ]; then
+            EXT="bin"
+          fi
+          
+          echo "original_name=$FILENAME" >> $GITHUB_OUTPUT
+          echo "extension=$EXT" >> $GITHUB_OUTPUT
+          echo "📁 نام اصلی فایل: $FILENAME"
+          echo "🔖 پسوند: $EXT"
+          
+      - name: دانلود فایل
+        run: |
+          URL="${{ github.event.inputs.download_url }}"
+          OUTPUT_NAME="${{ github.event.inputs.output_name }}"
+          
+          # تعیین نام نهایی
+          if [ -n "$OUTPUT_NAME" ]; then
+            # اگر کاربر اسم دلخواه داده
+            FINAL_NAME="$OUTPUT_NAME"
+          else
+            # استفاده از نام اصلی از لینک
+            FINAL_NAME="${{ steps.parse.outputs.original_name }}"
+          fi
+          
+          # دانلود با curl
+          curl -L -o "$FINAL_NAME" "$URL" --max-time 300 --retry 3
+          
+          # چک کردن اینکه فایل دانلود شده
+          if [ -f "$FINAL_NAME" ]; then
+            SIZE=$(du -h "$FINAL_NAME" | cut -f1)
+            echo "✅ دانلود شد: $FINAL_NAME (حجم: $SIZE)"
+            echo "file_name=$FINAL_NAME" >> $GITHUB_OUTPUT
+          else
+            echo "❌ دانلود ناموفق"
+            exit 1
+          fi
+          
+      - name: نمایش اطلاعات فایل
+        run: |
+          echo "📋 اطلاعات فایل دانلود شده:"
+          ls -la *.apk *.zip *.exe *.bin 2>/dev/null || ls -la
+          file --mime-type * 2>/dev/null || echo ""
           
       - name: آپلود به Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: release-files
-          path: downloads/
+          name: downloaded-file
+          path: |
+            *.apk
+            *.zip
+            *.exe
+            *.bin
+            *.mp4
+            *.mp3
+            *.pdf
+            *.apk
           retention-days: 7
