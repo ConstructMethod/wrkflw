@@ -1,35 +1,81 @@
-name: دانلود اپ رسمی دیپ‌سیک
+name: APK Downloader APKPure (Simple)
 
 on:
   workflow_dispatch:
+    inputs:
+      package_name:
+        description: 'اسم پکیج (مثل com.deepseek.chat)'
+        required: true
+        type: string
 
 jobs:
-  download:
+  download_apk:
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repo
+        uses: actions/checkout@v4
       
-      - name: نصب apkeep
+      - name: Install dependencies
         run: |
-          curl -LO https://github.com/Kajaqq/apkeep/releases/download/0.16.0/apkeep-x86_64-unknown-linux-gnu.tar.gz
-          tar xzf apkeep-x86_64-unknown-linux-gnu.tar.gz
-          chmod +x apkeep
-          sudo mv apkeep /usr/local/bin/
-
-      - name: دانلود DeepSeek از APKPure
+          sudo apt-get update
+          sudo apt-get install -y wget jq
+      
+      - name: Download APK from APKPure (via Direct Link)
         run: |
+          PACKAGE="${{ github.event.inputs.package_name }}"
           mkdir -p downloads
-          apkeep -a com.deepseek.chat -d apk-pure downloads/
-
-      - name: ذخیره در ریپو
+          
+          echo "🔍 Searching for $PACKAGE..."
+          
+          # استفاده از API جایگزین APKPure
+          RESPONSE=$(curl -s "https://apkpure.net/api/v1/package/$PACKAGE/versions/latest")
+          
+          # استخراج لینک دانلود
+          DOWNLOAD_URL=$(echo "$RESPONSE" | jq -r '.data.download_url')
+          
+          if [ "$DOWNLOAD_URL" != "null" ] && [ "$DOWNLOAD_URL" != "" ]; then
+            echo "📦 Downloading from: $DOWNLOAD_URL"
+            wget -O "downloads/${PACKAGE}.apk" "$DOWNLOAD_URL"
+            echo "✅ Download complete!"
+          else
+            echo "❌ Could not find download URL for $PACKAGE"
+            echo "Trying alternative method..."
+            
+            # روش دوم: دانلود مستقیم از سایت APKPure
+            PAGE_URL="https://apkpure.net/$PACKAGE/download"
+            wget -O page.html "$PAGE_URL"
+            DOWNLOAD_URL=$(grep -oP 'https://download\.apkpure\.net/.*?\.apk' page.html | head -1)
+            
+            if [ -n "$DOWNLOAD_URL" ]; then
+              wget -O "downloads/${PACKAGE}.apk" "$DOWNLOAD_URL"
+              echo "✅ Download complete via second method!"
+            fi
+          fi
+          
+          ls -la downloads/
+      
+      - name: Save to repo
+        if: success()
         run: |
-          mkdir -p "android-apps"
-          cp downloads/*.apk "android-apps/DeepSeek_official.apk"
+          TIMESTAMP=$(date +'%Y%m%d_%H%M%S')
+          mkdir -p "apk-files"
+          
+          for file in downloads/*.apk; do
+            if [ -f "$file" ]; then
+              cp "$file" "apk-files/${TIMESTAMP}_${{ github.event.inputs.package_name }}.apk"
+            fi
+          done
           
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add android-apps/
-          git commit -m "دانلود اپ رسمی DeepSeek" || echo "no changes"
+          git add apk-files/
+          git commit -m "Add APK: ${{ github.event.inputs.package_name }}" || echo "No changes to commit"
           git push origin main || git push origin master
+      
+      - name: Show download link
+        if: success()
+        run: |
+          echo "🔗 Download from here:"
+          echo "https://raw.githubusercontent.com/${{ github.repository }}/main/apk-files/$(ls apk-files/)"
