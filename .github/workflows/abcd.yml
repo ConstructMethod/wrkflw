@@ -1,94 +1,35 @@
-name: "DirectDL"
+name: دانلود اپ رسمی دیپ‌سیک
 
 on:
   workflow_dispatch:
-    inputs:
-      download_url:
-        description: 'لینک مستقیم فایل'
-        required: true
-      output_name:
-        description: 'اسم دلخواه خروجی (خالی بذار = خودکار از لینک میگیره)'
-        required: false
-        default: ''
 
 jobs:
   download:
     runs-on: ubuntu-latest
-    
+    permissions:
+      contents: write
     steps:
-      - name: استخراج نام فایل از لینک
-        id: parse
+      - uses: actions/checkout@v4
+      
+      - name: نصب apkeep
         run: |
-          URL="${{ github.event.inputs.download_url }}"
-          
-          # روش 1: از پارامتر filename= در لینک بگیر
-          FILENAME=$(echo "$URL" | grep -oP 'filename=\K[^&]+' | head -1)
-          
-          # روش 2: اگر روش بالا جواب نداد، از آخر لینک بعد از آخرین / بگیر
-          if [ -z "$FILENAME" ]; then
-            FILENAME=$(echo "$URL" | sed 's/.*\///' | sed 's/?.*//')
-          fi
-          
-          # روش 3: اگر بازم نگرفت، از تاریخ استفاده کن
-          if [ -z "$FILENAME" ]; then
-            FILENAME="downloaded_file"
-          fi
-          
-          # استخراج پسوند فایل
-          EXT="${FILENAME##*.}"
-          if [ "$EXT" = "$FILENAME" ]; then
-            EXT="bin"
-          fi
-          
-          echo "original_name=$FILENAME" >> $GITHUB_OUTPUT
-          echo "extension=$EXT" >> $GITHUB_OUTPUT
-          echo "📁 نام اصلی فایل: $FILENAME"
-          echo "🔖 پسوند: $EXT"
-          
-      - name: دانلود فایل
+          curl -LO https://github.com/Kajaqq/apkeep/releases/download/0.16.0/apkeep-x86_64-unknown-linux-gnu.tar.gz
+          tar xzf apkeep-x86_64-unknown-linux-gnu.tar.gz
+          chmod +x apkeep
+          sudo mv apkeep /usr/local/bin/
+
+      - name: دانلود DeepSeek از APKPure
         run: |
-          URL="${{ github.event.inputs.download_url }}"
-          OUTPUT_NAME="${{ github.event.inputs.output_name }}"
-          
-          # تعیین نام نهایی
-          if [ -n "$OUTPUT_NAME" ]; then
-            # اگر کاربر اسم دلخواه داده
-            FINAL_NAME="$OUTPUT_NAME"
-          else
-            # استفاده از نام اصلی از لینک
-            FINAL_NAME="${{ steps.parse.outputs.original_name }}"
-          fi
-          
-          # دانلود با curl
-          curl -L -o "$FINAL_NAME" "$URL" --max-time 300 --retry 3
-          
-          # چک کردن اینکه فایل دانلود شده
-          if [ -f "$FINAL_NAME" ]; then
-            SIZE=$(du -h "$FINAL_NAME" | cut -f1)
-            echo "✅ دانلود شد: $FINAL_NAME (حجم: $SIZE)"
-            echo "file_name=$FINAL_NAME" >> $GITHUB_OUTPUT
-          else
-            echo "❌ دانلود ناموفق"
-            exit 1
-          fi
-          
-      - name: نمایش اطلاعات فایل
+          mkdir -p downloads
+          apkeep -a com.deepseek.chat -d apk-pure downloads/
+
+      - name: ذخیره در ریپو
         run: |
-          echo "📋 اطلاعات فایل دانلود شده:"
-          ls -la *.apk *.zip *.exe *.bin 2>/dev/null || ls -la
-          file --mime-type * 2>/dev/null || echo ""
+          mkdir -p "android-apps"
+          cp downloads/*.apk "android-apps/DeepSeek_official.apk"
           
-      - name: آپلود به Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: downloaded-file
-          path: |
-            *.apk
-            *.zip
-            *.exe
-            *.bin
-            *.mp4
-            *.mp3
-            *.pdf
-            *.apk
-          retention-days: 7
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add android-apps/
+          git commit -m "دانلود اپ رسمی DeepSeek" || echo "no changes"
+          git push origin main || git push origin master
