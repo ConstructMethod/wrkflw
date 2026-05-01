@@ -1,53 +1,74 @@
-name: دانلود فایل از Release
+name: Release Downloader
 
 on:
   workflow_dispatch:
     inputs:
-      repo:
-        description: 'ریپازیتوری (مثال: owner/repo)'
+      repo_url:
+        description: 'ادس ریپوسیتوری (مثل username/repo)'
         required: true
-        default: 'facebook/react'
+        type: string
       tag:
-        description: 'Tag یا نسخه (خالی بذار = آخرین)'
-        required: false
-      file_pattern:
-        description: 'اسم فایل (میتونه * باشه)'
+        description: 'تگ نسخه (مثل v1.0.0 یا latest)'
         required: true
-        default: '*.zip'
-      extract_files:
-        description: 'استخراج خودکار؟ (true/false)'
-        required: false
-        default: 'false'
+        type: string
+        default: 'latest'
+      file_pattern:
+        description: 'اسم فایل یا الگو (مثل *.zip, app.apk, یا * برای همه)'
+        required: true
+        type: string
+        default: '*'
 
 jobs:
-  download-release:
+  download:
     runs-on: ubuntu-latest
-    
     steps:
-      # مرحله 1: فایل‌ها رو دانلود کن
-      - name: Download release assets
-        id: downloader
-        uses: robinraju/release-downloader@v1.13
-        with:
-          repository: ${{ github.event.inputs.repo }}
-          tag: ${{ github.event.inputs.tag }}
-          latest: ${{ github.event.inputs.tag == '' }}
-          fileName: ${{ github.event.inputs.file_pattern }}
-          out-file-path: 'my-downloads'
-          extract: ${{ github.event.inputs.extract_files == 'true' }}
-      
-      # مرحله 2: نشون بده چی دانلود شده
-      - name: Show downloaded files
+      - name: Get release info
+        id: get_release
         run: |
-          echo "لیست فایل‌های دانلود شده:"
-          ls -la my-downloads/
-          echo "-------------------"
-          echo "Tag مورد استفاده: ${{ steps.downloader.outputs.tag_name }}"
-          echo "اسم Release: ${{ steps.downloader.outputs.release_name }}"
-      
-      # مرحله 3: (اختیاری) آپلود به عنوان Artifact
-      - name: Upload as artifact
+          REPO="${{ github.event.inputs.repo_url }}"
+          TAG="${{ github.event.inputs.tag }}"
+          
+          if [ "$TAG" = "latest" ]; then
+            URL="https://api.github.com/repos/${REPO}/releases/latest"
+          else
+            URL="https://api.github.com/repos/${REPO}/releases/tags/${TAG}"
+          fi
+          
+          RESPONSE=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" $URL)
+          
+          if [ "$TAG" = "latest" ]; then
+            ACTUAL_TAG=$(echo $RESPONSE | jq -r .tag_name)
+          else
+            ACTUAL_TAG="$TAG"
+          fi
+          
+          echo "tag_name=$ACTUAL_TAG" >> $GITHUB_OUTPUT
+          
+          echo "📦 ریلیز پیدا شد: $ACTUAL_TAG"
+          
+          echo "$RESPONSE" > release.json
+          
+          echo "📄 فایل‌های موجود:"
+          echo "$RESPONSE" | jq -r '.assets[] | "   🔹 " + .name + " (" + (.size | tostring) + " bytes)"'
+
+      - name: Download files
+        uses: robinraju/release-downloader@v1.10
+        with:
+          repository: ${{ github.event.inputs.repo_url }}
+          tag: ${{ steps.get_release.outputs.tag_name }}
+          fileName: ${{ github.event.inputs.file_pattern }}
+          out-file-path: 'downloaded'
+          extract: false
+
+      - name: List downloaded files
+        run: |
+          echo "✨ فایل‌های دانلود شده:"
+          ls -la downloaded/
+          echo "📁 تعداد فایل‌ها: $(ls -1 downloaded/ | wc -l)"
+
+      - name: Upload to artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: downloaded-files
-          path: my-downloads/
+          name: release-files-${{ steps.get_release.outputs.tag_name }}
+          path: downloaded/
+          retention-days: 7
