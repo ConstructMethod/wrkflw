@@ -1,10 +1,10 @@
-name: APK Downloader APKPure (Simple)
+name: APK Downloader (APKPure Direct)
 
 on:
   workflow_dispatch:
     inputs:
       package_name:
-        description: 'اسم پکیج (مثل com.deepseek.chat)'
+        description: 'Package name (مثل com.deepseek.chat)'
         required: true
         type: string
 
@@ -17,65 +17,51 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
       
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y wget jq
-      
-      - name: Download APK from APKPure (via Direct Link)
+      - name: Download APK with APKPure Direct Link
         run: |
           PACKAGE="${{ github.event.inputs.package_name }}"
+          
+          # استفاده از لینک مستقیم APKPure
+          DIRECT_URL="https://d.apkpure.net/b/APK/${PACKAGE}?version=latest"
+          
+          echo "🔗 Downloading from: $DIRECT_URL"
+          echo "📦 Package: $PACKAGE"
+          
           mkdir -p downloads
           
-          echo "🔍 Searching for $PACKAGE..."
+          # امتحان با curl و User-Agent موبایل
+          curl -L \
+            -H "User-Agent: Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36" \
+            -H "Accept: */*" \
+            -o "downloads/${PACKAGE}.apk" \
+            "$DIRECT_URL"
           
-          # استفاده از API جایگزین APKPure
-          RESPONSE=$(curl -s "https://apkpure.net/api/v1/package/$PACKAGE/versions/latest")
-          
-          # استخراج لینک دانلود
-          DOWNLOAD_URL=$(echo "$RESPONSE" | jq -r '.data.download_url')
-          
-          if [ "$DOWNLOAD_URL" != "null" ] && [ "$DOWNLOAD_URL" != "" ]; then
-            echo "📦 Downloading from: $DOWNLOAD_URL"
-            wget -O "downloads/${PACKAGE}.apk" "$DOWNLOAD_URL"
-            echo "✅ Download complete!"
+          # بررسی حجم فایل
+          if [ -f "downloads/${PACKAGE}.apk" ] && [ -s "downloads/${PACKAGE}.apk" ]; then
+            SIZE=$(du -h "downloads/${PACKAGE}.apk" | cut -f1)
+            echo "✅ Download successful! Size: $SIZE"
           else
-            echo "❌ Could not find download URL for $PACKAGE"
-            echo "Trying alternative method..."
-            
-            # روش دوم: دانلود مستقیم از سایت APKPure
-            PAGE_URL="https://apkpure.net/$PACKAGE/download"
-            wget -O page.html "$PAGE_URL"
-            DOWNLOAD_URL=$(grep -oP 'https://download\.apkpure\.net/.*?\.apk' page.html | head -1)
-            
-            if [ -n "$DOWNLOAD_URL" ]; then
-              wget -O "downloads/${PACKAGE}.apk" "$DOWNLOAD_URL"
-              echo "✅ Download complete via second method!"
-            fi
+            echo "❌ Download failed or empty file"
+            exit 1
           fi
           
           ls -la downloads/
       
       - name: Save to repo
-        if: success()
         run: |
           TIMESTAMP=$(date +'%Y%m%d_%H%M%S')
+          PACKAGE="${{ github.event.inputs.package_name }}"
           mkdir -p "apk-files"
           
-          for file in downloads/*.apk; do
-            if [ -f "$file" ]; then
-              cp "$file" "apk-files/${TIMESTAMP}_${{ github.event.inputs.package_name }}.apk"
-            fi
-          done
+          cp "downloads/${PACKAGE}.apk" "apk-files/${TIMESTAMP}_${PACKAGE}.apk"
           
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add apk-files/
-          git commit -m "Add APK: ${{ github.event.inputs.package_name }}" || echo "No changes to commit"
+          git commit -m "Add APK: ${PACKAGE}" || echo "No changes to commit"
           git push origin main || git push origin master
       
       - name: Show download link
-        if: success()
         run: |
-          echo "🔗 Download from here:"
+          echo "🔗 لینک مستقیم دانلود از ریپو:"
           echo "https://raw.githubusercontent.com/${{ github.repository }}/main/apk-files/$(ls apk-files/)"
