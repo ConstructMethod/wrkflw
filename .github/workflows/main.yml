@@ -1,74 +1,90 @@
-name: Release Downloader
+name: خفن ترین Release Downloader
 
 on:
   workflow_dispatch:
     inputs:
       repo_url:
-        description: 'ادس ریپوسیتوری (مثل username/repo)'
+        description: 'آدرس ریپو (مثل tailscale/tailscale)'
         required: true
         type: string
-      tag:
-        description: 'تگ نسخه (مثل v1.0.0 یا latest)'
+      version:
+        description: 'تگ یا latest'
         required: true
         type: string
         default: 'latest'
-      file_pattern:
-        description: 'اسم فایل یا الگو (مثل *.zip, app.apk, یا * برای همه)'
+      file_filter:
+        description: 'اسم فایل یا الگو (*.apk, *.zip, *)'
         required: true
         type: string
         default: '*'
 
 jobs:
-  download:
+  super_downloader:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - name: Get release info
-        id: get_release
-        run: |
-          REPO="${{ github.event.inputs.repo_url }}"
-          TAG="${{ github.event.inputs.tag }}"
-          
-          if [ "$TAG" = "latest" ]; then
-            URL="https://api.github.com/repos/${REPO}/releases/latest"
-          else
-            URL="https://api.github.com/repos/${REPO}/releases/tags/${TAG}"
-          fi
-          
-          RESPONSE=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" $URL)
-          
-          if [ "$TAG" = "latest" ]; then
-            ACTUAL_TAG=$(echo $RESPONSE | jq -r .tag_name)
-          else
-            ACTUAL_TAG="$TAG"
-          fi
-          
-          echo "tag_name=$ACTUAL_TAG" >> $GITHUB_OUTPUT
-          
-          echo "📦 ریلیز پیدا شد: $ACTUAL_TAG"
-          
-          echo "$RESPONSE" > release.json
-          
-          echo "📄 فایل‌های موجود:"
-          echo "$RESPONSE" | jq -r '.assets[] | "   🔹 " + .name + " (" + (.size | tostring) + " bytes)"'
+      - name: چک اوت ریپو
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Download files
-        uses: robinraju/release-downloader@v1.10
+      - name: دانلود با قدرت الهی
+        uses: robinraju/release-downloader@v1.11
+        id: downloader
         with:
           repository: ${{ github.event.inputs.repo_url }}
-          tag: ${{ steps.get_release.outputs.tag_name }}
-          fileName: ${{ github.event.inputs.file_pattern }}
-          out-file-path: 'downloaded'
+          tag: ${{ github.event.inputs.version }}
+          fileName: ${{ github.event.inputs.file_filter }}
+          out-file-path: 'downloaded_files'
           extract: false
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: List downloaded files
+      - name: نمایش اطلاعات دانلود شده
         run: |
-          echo "✨ فایل‌های دانلود شده:"
-          ls -la downloaded/
-          echo "📁 تعداد فایل‌ها: $(ls -1 downloaded/ | wc -l)"
+          echo "🔥 تگی که دانلود شد: ${{ steps.downloader.outputs.tag_name }}"
+          echo "📂 فایل‌های دانلود شده:"
+          ls -la downloaded_files/
+          echo "📊 تعداد فایل‌ها: $(ls -1 downloaded_files/ | wc -l)"
 
-      - name: Upload to artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-files-${{ steps.get_release.outputs.tag_name }}
-          path: downloaded/
-          retention-days: 7
+      - name: انتقال فایل‌ها به ریپو
+        run: |
+          TAG="${{ steps.downloader.outputs.tag_name }}"
+          TIMESTAMP=$(date +'%Y%m%d_%H%M%S')
+          
+          mkdir -p "releases/$TAG"
+          
+          for file in downloaded_files/*; do
+            if [ -f "$file" ]; then
+              filename=$(basename "$file")
+              cp "$file" "releases/$TAG/${TIMESTAMP}_${filename}"
+            fi
+          done
+          
+          echo "✅ فایل‌ها کپی شدن به releases/$TAG/"
+
+      - name: کانفیگ گیت
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: کامیت و پوش کردن به ریپو
+        run: |
+          git add releases/
+          git commit -m "دانلود خودکار: ${{ steps.downloader.outputs.tag_name }} از ${{ github.event.inputs.repo_url }}" || echo "هیچی برای کامیت نیست"
+          git push origin main || git push origin master
+
+      - name: نمایش لینک دانلود مستقیم
+        run: |
+          TAG="${{ steps.downloader.outputs.tag_name }}"
+          echo "🎯 فایل‌ها توی ریپو ذخیره شدن:"
+          echo "📁 releases/$TAG/"
+          echo ""
+          echo "🔗 لینک‌های دانلود مستقیم (بدون تحریم):"
+          
+          for file in releases/$TAG/*; do
+            if [ -f "$file" ]; then
+              filename=$(basename "$file")
+              echo "https://raw.githubusercontent.com/${{ github.repository }}/main/releases/$TAG/$filename"
+            fi
+          done
