@@ -1,0 +1,45 @@
+name: Test Apps Script Relay
+
+on:
+  workflow_dispatch:  # دستی اجرا میشه
+  schedule:
+    - cron: '0 */6 * * *'  # هر 6 ساعت یکبار (اختیاری)
+
+jobs:
+  test-relay:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Test Relay Connection
+        run: |
+          echo "🔄 Sending request to Apps Script..."
+          
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "${{ secrets.APPS_SCRIPT_URL }}" \
+            -H "Content-Type: application/json" \
+            -d '{"k":"AAST","u":"https://google.com","m":"GET"}')
+          
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+          
+          echo "📡 HTTP Status: $HTTP_CODE"
+          echo "📦 Response Body: $BODY"
+          
+          if [ "$HTTP_CODE" -eq 200 ]; then
+            echo "✅ Relay is WORKING!"
+          else
+            echo "❌ Relay FAILED with status $HTTP_CODE"
+            exit 1
+          fi
+      
+      - name: Parse and check response
+        run: |
+          RESPONSE=$(curl -s -X POST "${{ secrets.APPS_SCRIPT_URL }}" \
+            -H "Content-Type: application/json" \
+            -d '{"k":"AAST","u":"https://google.com","m":"GET"}')
+          
+          # چک کردن اینکه جواب حاوی "Google" باشه
+          if echo "$RESPONSE" | grep -q "Google"; then
+            echo "🎉 Perfect! Got Google response"
+          else
+            echo "⚠️ Response doesn't contain Google"
+          fi
